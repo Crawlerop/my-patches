@@ -4538,7 +4538,7 @@ Only in ffmpeg-5.1.2/libavformat: mov_chan.o
 Only in ffmpeg-5.1.2/libavformat: mov.d
 diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/movenc.c
 --- original/ffmpeg-5.1.2/libavformat/movenc.c	2022-07-23 00:58:39.000000000 +0700
-+++ ffmpeg-5.1.2/libavformat/movenc.c	2022-11-24 17:03:24.641772941 +0700
++++ ffmpeg-5.1.2/libavformat/movenc.c	2022-11-25 06:44:57.556156980 +0700
 @@ -68,8 +68,10 @@
  #include "version.h"
  #include "vpcc.h"
@@ -4551,7 +4551,26 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
      { "rtphint", "Add RTP hint tracks", 0, AV_OPT_TYPE_CONST, {.i64 = FF_MOV_FLAG_RTP_HINT}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "movflags" },
      { "moov_size", "maximum moov size so it can be placed at the begin", offsetof(MOVMuxContext, reserved_moov_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, 0 },
      { "empty_moov", "Make the initial moov atom empty", 0, AV_OPT_TYPE_CONST, {.i64 = FF_MOV_FLAG_EMPTY_MOOV}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "movflags" },
-@@ -2863,7 +2865,11 @@
+@@ -2141,7 +2143,17 @@
+          track->mode == MODE_MOV ||
+          track->mode == MODE_MP4) &&
+         (encoder = av_dict_get(track->st->metadata, "encoder", NULL, 0))) {
+-        av_strlcpy(compressor_name, encoder->value, 32);
++        switch (track->par->codec_id) {
++            case AV_CODEC_ID_H264:
++                av_strlcpy(compressor_name, "AVC Coding", 32);
++                break;
++            case AV_CODEC_ID_AV1:
++                av_strlcpy(compressor_name, "AOM Coding", 32);
++                break;
++            default: 
++                av_strlcpy(compressor_name, encoder->value, 32);
++                break;
++        }
+     } else if (track->par->codec_id == AV_CODEC_ID_MPEG2VIDEO && xdcam_res) {
+         int interlaced = track->par->field_order > AV_FIELD_PROGRESSIVE;
+         AVStream *st = track->st;
+@@ -2863,7 +2875,11 @@
  
      hdlr      = "dhlr";
      hdlr_type = "url ";
@@ -4563,7 +4582,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
  
      if (track) {
          hdlr = (track->mode == MODE_MOV) ? "mhlr" : "\0\0\0\0";
-@@ -2873,11 +2879,19 @@
+@@ -2873,11 +2889,19 @@
                  descr     = "PictureHandler";
              } else {
                  hdlr_type = "vide";
@@ -4583,7 +4602,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
          } else if (track->par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
              if (is_clcp_track(track)) {
                  hdlr_type = "clcp";
-@@ -4061,8 +4075,13 @@
+@@ -4061,8 +4085,13 @@
      mov_write_string_metadata(s, pb, "\251alb", "album"    , 1);
      mov_write_string_metadata(s, pb, "\251day", "date"     , 1);
      if (!mov_write_string_metadata(s, pb, "\251too", "encoding_tool", 1)) {
@@ -4597,7 +4616,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
      }
      mov_write_string_metadata(s, pb, "\251cmt", "comment"  , 1);
      mov_write_string_metadata(s, pb, "\251gen", "genre"    , 1);
-@@ -4563,9 +4582,15 @@
+@@ -4563,9 +4592,15 @@
      avio_printf(pb, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
      avio_printf(pb, "<smil xmlns=\"http://www.w3.org/2001/SMIL20/Language\">\n");
      avio_printf(pb, "<head>\n");
@@ -4613,7 +4632,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
      avio_printf(pb, "</head>\n");
      avio_printf(pb, "<body>\n");
      avio_printf(pb, "<switch>\n");
-@@ -5261,19 +5286,19 @@
+@@ -5261,19 +5296,19 @@
                                          int has_h264, int has_video, int write_minor)
  {
      MOVMuxContext *mov = s->priv_data;
@@ -4637,7 +4656,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
      } else if (mov->mode == MODE_PSP)
          ffio_wfourcc(pb, "MSNV");
      else if (mov->mode == MODE_MP4 && mov->flags & FF_MOV_FLAG_FRAGMENT &&
-@@ -5284,7 +5309,7 @@
+@@ -5284,7 +5319,7 @@
      else if (mov->mode == MODE_MP4 && mov->flags & FF_MOV_FLAG_NEGATIVE_CTS_OFFSETS)
          ffio_wfourcc(pb, "iso4");
      else if (mov->mode == MODE_MP4)
@@ -4646,7 +4665,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/movenc.c ffmpeg-5.1.2/libavformat/mov
      else if (mov->mode == MODE_IPOD)
          ffio_wfourcc(pb, has_video ? "M4V ":"M4A ");
      else if (mov->mode == MODE_ISM)
-@@ -5384,10 +5409,12 @@
+@@ -5384,10 +5419,12 @@
          if (!(mov->flags & FF_MOV_FLAG_DEFAULT_BASE_MOOF)) {
              // write isom for mp4 only if it it's not the major brand already.
              if (mov->mode != MODE_MP4 || mov->flags & FF_MOV_FLAG_NEGATIVE_CTS_OFFSETS)
