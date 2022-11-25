@@ -4215,7 +4215,7 @@ Only in ffmpeg-5.1.2/libavformat: hevc.o
 Only in ffmpeg-5.1.2/libavformat: hls.d
 diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hlsenc.c
 --- original/ffmpeg-5.1.2/libavformat/hlsenc.c	2022-07-23 00:58:39.000000000 +0700
-+++ ffmpeg-5.1.2/libavformat/hlsenc.c	2022-11-24 23:18:15.432434779 +0700
++++ ffmpeg-5.1.2/libavformat/hlsenc.c	2022-11-25 09:57:40.500324523 +0700
 @@ -252,6 +252,7 @@
      AVIOContext *sub_m3u8_out;
      int64_t timeout;
@@ -4228,7 +4228,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
          snprintf(period, sizeof(period), "%d", (INT_MAX / 2) - 1);
          av_dict_set(&options, "sdt_period", period, AV_DICT_DONT_OVERWRITE);
          av_dict_set(&options, "pat_period", period, AV_DICT_DONT_OVERWRITE);
-+        av_dict_set(&options, "mpegts_flags", "-sdt+align_frames", AV_DICT_APPEND);
++        av_dict_set(&options, "mpegts_flags", "-sdt+align_frames+hls", AV_DICT_APPEND);
 +        if (hls->max_delay_zero) oc->max_delay = 0;
      }
      ret = avformat_init_output(oc, &options);
@@ -4709,12 +4709,15 @@ Only in ffmpeg-5.1.2/libavformat: mpeg.o
 Only in ffmpeg-5.1.2/libavformat: mpegts.d
 diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/mpegtsenc.c
 --- original/ffmpeg-5.1.2/libavformat/mpegtsenc.c	2022-07-23 00:58:39.000000000 +0700
-+++ ffmpeg-5.1.2/libavformat/mpegtsenc.c	2022-11-24 23:21:03.470589835 +0700
-@@ -99,18 +99,25 @@
++++ ffmpeg-5.1.2/libavformat/mpegtsenc.c	2022-11-25 09:57:31.432411436 +0700
+@@ -99,18 +99,28 @@
      int pmt_start_pid;
      int start_pid;
      int m2ts_mode;
 +    int resend_headers; // Workaround
++
++    int hls_start; // Workaround
++    int hls_resend; // Workaroud
 +
      int m2ts_video_pid;
      int m2ts_audio_pid;
@@ -4735,14 +4738,14 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
 +#define MPEGTS_FLAG_DISCONT                     (1 << 4)
 +#define MPEGTS_FLAG_NIT                         (1 << 5)
 +#define MPEGTS_FLAG_ENABLE_SDT                  (1 << 6)
-+//#define MPEGTS_FLAG_HLS                         0x80
 +#define MPEGTS_FLAG_ALIGN_FRAMES                (1 << 7)
 +#define MPEGTS_FLAG_PICASA                      (1 << 8)
 +#define MPEGTS_FLAG_NO_RAM_KEYFRAME             (1 << 9)
++#define MPEGTS_FLAG_HLS                         (1 << 10)
      int flags;
      int copyts;
      int tables_version;
-@@ -189,6 +196,65 @@
+@@ -189,6 +199,65 @@
      }
  }
  
@@ -4808,7 +4811,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  static inline void put16(uint8_t **q_ptr, int val)
  {
      uint8_t *q;
-@@ -200,7 +266,7 @@
+@@ -200,7 +269,7 @@
  
  static int mpegts_write_section1(MpegTSSection *s, int tid, int id,
                                   int version, int sec_num, int last_sec_num,
@@ -4817,7 +4820,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  {
      uint8_t section[1024], *q;
      unsigned int tot_len;
-@@ -216,19 +282,32 @@
+@@ -216,19 +285,32 @@
      *q++ = tid;
      put16(&q, flags | (len + 5 + 4)); /* 5 byte header + 4 byte CRC */
      put16(&q, id);
@@ -4853,7 +4856,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  #define DEFAULT_SERVICE_NAME    "Service"
  
  /* we retransmit the SI info at this rate */
-@@ -279,7 +358,7 @@
+@@ -279,7 +361,7 @@
          put16(&q, 0xe000 | service->pmt.pid);
      }
      mpegts_write_section1(&ts->pat, PAT_TID, ts->transport_stream_id, ts->tables_version, 0, 0,
@@ -4862,7 +4865,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  }
  
  static void putbuf(uint8_t **q_ptr, const uint8_t *buf, size_t len)
-@@ -500,7 +579,10 @@
+@@ -500,7 +582,10 @@
      int val, stream_type, i, err = 0;
  
      q = data;
@@ -4874,7 +4877,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  
      program_info_length_ptr = q;
      q += 2; /* patched after */
-@@ -826,7 +908,7 @@
+@@ -826,7 +911,7 @@
                 "or the total number of streams.\n", i);
  
      mpegts_write_section1(&service->pmt, PMT_TID, service->sid, ts->tables_version, 0, 0,
@@ -4883,7 +4886,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
      return 0;
  }
  
-@@ -865,7 +947,7 @@
+@@ -865,7 +950,7 @@
          desc_list_len_ptr[1] = val;
      }
      mpegts_write_section1(&ts->sdt, SDT_TID, ts->transport_stream_id, ts->tables_version, 0, 0,
@@ -4892,7 +4895,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  }
  
  static void mpegts_write_nit(AVFormatContext *s)
-@@ -906,7 +988,7 @@
+@@ -906,7 +991,7 @@
      put16(&loop_len_ptr, 0xf000 | q - (loop_len_ptr + 2));
  
      mpegts_write_section1(&ts->nit, NIT_TID, ts->original_network_id, ts->tables_version, 0, 0,
@@ -4901,7 +4904,16 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  }
  
  /* This stores a string in buf with the correct encoding and also sets the
-@@ -1194,7 +1276,11 @@
+@@ -1123,6 +1208,8 @@
+         }
+     }
+ 
++    ts->hls_start        = 1;
++
+     ts->pat.pid          = PAT_PID;
+     /* Initialize at 15 so that it wraps and is equal to 0 for the
+      * first packet we write. */
+@@ -1194,7 +1281,11 @@
                      return AVERROR(EINVAL);
                  }
              } else {
@@ -4914,7 +4926,15 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
              }
          } else {
              ts_st->pid = st->id;
-@@ -1302,7 +1388,8 @@
+@@ -1296,13 +1387,16 @@
+     MpegTSWrite *ts = s->priv_data;
+     int i;
+ 
++    if ((ts->flags & MPEGTS_FLAG_HLS) && !ts->hls_resend) return;
++
+     if ((pcr != AV_NOPTS_VALUE && ts->last_sdt_ts == AV_NOPTS_VALUE) ||
+         (pcr != AV_NOPTS_VALUE && pcr - ts->last_sdt_ts >= ts->sdt_period) ||
+         force_sdt
      ) {
          if (pcr != AV_NOPTS_VALUE)
              ts->last_sdt_ts = FFMAX(pcr, ts->last_sdt_ts);
@@ -4924,7 +4944,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
      }
      if ((pcr != AV_NOPTS_VALUE && ts->last_pat_ts == AV_NOPTS_VALUE) ||
          (pcr != AV_NOPTS_VALUE && pcr - ts->last_pat_ts >= ts->pat_period) ||
-@@ -1382,6 +1469,31 @@
+@@ -1382,6 +1476,31 @@
      write_packet(s, buf);
  }
  
@@ -4956,7 +4976,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
  static void write_pts(uint8_t *q, int fourbits, int64_t pts)
  {
      int val;
-@@ -1485,6 +1597,11 @@
+@@ -1485,13 +1604,24 @@
          force_pat = 1;
      }
  
@@ -4966,9 +4986,30 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
 +    }
 +
      if (ts->flags & MPEGTS_FLAG_REEMIT_PAT_PMT) {
++        ts->hls_resend = 1;
          force_pat = 1;
          force_sdt = 1;
-@@ -1521,7 +1638,10 @@
+         force_nit = 1;
+         ts->flags &= ~MPEGTS_FLAG_REEMIT_PAT_PMT;
+     }
+ 
++    if (ts->hls_start) {
++        ts->hls_resend = 1;
++        ts->hls_start = 0;
++    }
++
+     is_start = 1;
+     while (payload_size > 0) {
+         int64_t pcr = AV_NOPTS_VALUE;
+@@ -1501,6 +1631,7 @@
+             pcr = (dts - delay) * 300;
+ 
+         retransmit_si_info(s, force_pat, force_sdt, force_nit, pcr);
++        ts->hls_resend = 0;
+         force_pat = 0;
+         force_sdt = 0;
+         force_nit = 0;
+@@ -1521,7 +1652,10 @@
                          if (pcr - ts_st2->last_pcr >= ts_st2->pcr_period) {
                              ts_st2->last_pcr = FFMAX(pcr - ts_st2->pcr_period, ts_st2->last_pcr + ts_st2->pcr_period);
                              if (st2 != st) {
@@ -4980,7 +5021,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
                                  pcr = get_pcr(ts);
                              } else {
                                  write_pcr = 1;
-@@ -1534,7 +1654,7 @@
+@@ -1534,7 +1668,7 @@
              }
              if (dts != AV_NOPTS_VALUE && (dts - pcr / 300) > delay) {
                  /* pcr insert gets priority over null packet insert */
@@ -4989,7 +5030,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
                      mpegts_insert_pcr_only(s, st);
                  else
                      mpegts_insert_null_packet(s);
-@@ -1570,10 +1690,11 @@
+@@ -1570,10 +1704,11 @@
              // set Random Access for key frames
              if (ts_st->pcr_period)
                  write_pcr = 1;
@@ -5003,7 +5044,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
              set_af_flag(buf, 0x10);
              q = get_ts_payload_start(buf);
              // add 11, pcr references the last byte of program clock reference base
-@@ -2158,6 +2279,13 @@
+@@ -2158,6 +2293,13 @@
              ts_st->payload_size = 0;
              ts_st->opus_queued_samples = 0;
          }
@@ -5017,7 +5058,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
      }
  
      if (ts->m2ts_mode) {
-@@ -2261,14 +2389,15 @@
+@@ -2261,14 +2403,15 @@
      { "hevc_digital_hdtv", "HEVC Digital Television Service.",
        0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_SERVICE_TYPE_HEVC_DIGITAL_HDTV }, 0x01, 0xff, ENC, "mpegts_service_type" },
      { "mpegts_pmt_start_pid", "Set the first pid of the PMT.",
@@ -5035,15 +5076,15 @@ diff -ru original/ffmpeg-5.1.2/libavformat/mpegtsenc.c ffmpeg-5.1.2/libavformat/
      { "resend_headers", "Reemit PAT/PMT before writing the next packet",
        0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_REEMIT_PAT_PMT }, 0, INT_MAX, ENC, "mpegts_flags" },
      { "latm", "Use LATM packetization for AAC",
-@@ -2281,6 +2410,18 @@
+@@ -2281,6 +2424,18 @@
        0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_DISCONT }, 0, INT_MAX, ENC, "mpegts_flags" },
      { "nit", "Enable NIT transmission",
        0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_NIT}, 0, INT_MAX, ENC, "mpegts_flags" },
 +
 +    { "sdt", "Enable SDT transmission",
 +      0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_ENABLE_SDT}, 0, INT_MAX, ENC, "mpegts_flags" },
-+    //{ "hls", "HLS TS muxing behavior",
-+    //  0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_HLS}, 0, INT_MAX, ENC, "mpegts_flags" },        
++    { "hls", "HLS TS muxing behavior",
++      0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_HLS}, 0, INT_MAX, ENC, "mpegts_flags" },        
 +    { "no_ram_keyframes", "Don't set Random Access flag on each keyframes", 
 +      0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_NO_RAM_KEYFRAME}, 0, INT_MAX, ENC, "mpegts_flags"},
 +    { "align_frames", "Align MPEG-TS frames",
