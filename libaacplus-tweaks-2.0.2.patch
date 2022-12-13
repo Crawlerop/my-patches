@@ -1340,7 +1340,55 @@ Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: cfftn.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: cfftn.o
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: channel_map.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: channel_map.o
-Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: code_env.lo
+diff -ru libaacplus/libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c ../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c
+--- libaacplus/libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c	2022-11-24 23:32:28.004870000 +0700
++++ ../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c	2022-12-13 21:11:32.866592769 +0700
+@@ -364,10 +364,14 @@
+ 
+          
+         if (index != delta) {
++          fprintf(stderr, "SBR delta %d != %d\n", index, delta);
++
++          /*
+           assert(0);
+ 
+           
+           return (10000);
++          */
+         }
+ 
+          
+@@ -382,10 +386,14 @@
+ 
+        
+       if (index != delta) {
++        fprintf(stderr, "SBR delta %d != %d\n", index, delta);
++
++        /*
+         assert(0);
+ 
+         
+         return (10000);
++        */
+       }
+ 
+        
+@@ -401,10 +409,14 @@
+ 
+      
+     if (index != delta) {
++      fprintf(stderr, "SBR delta %d != %d\n", index, delta);
++
++      /*
+       assert(0);
+ 
+       
+       return (10000);
++      */
+     }
+ 
+      
+Only in ../p-m-progs/libaacplus-2.0.2-aac/src: code_env.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: code_env.o
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: .deps
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: dyn_bits.lo
