@@ -296,7 +296,7 @@ Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: aacenc.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: aacenc.o
 diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/libaacplus-2.0.2-aac/src/aacplusenc.c
 --- libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c	2010-11-11 04:27:41.000000000 +0700
-+++ ../../p-m-progs/libaacplus-2.0.2-aac/src/aacplusenc.c	2022-07-30 14:37:45.883093394 +0700
++++ ../../p-m-progs/libaacplus-2.0.2-aac/src/aacplusenc.c	2022-12-21 13:47:22.967275277 +0700
 @@ -61,6 +61,13 @@
                    unsigned int numChannels,
                    unsigned long *inputSamples,
@@ -336,7 +336,7 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
      *maxOutputBytes = (6144/8)*MAX_CHANNELS+ADTS_HEADER_SIZE;
      return (aacplusEncHandle ) aacp;
  }
-@@ -95,9 +112,60 @@
+@@ -95,9 +112,77 @@
  
  
  
@@ -349,11 +349,23 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 +    return aacplusEncSetConfigurationLC(hEncoder, cfg);
 +}
  
++#define FFMAX(a,b) ((a) > (b) ? (a) : (b))
++#define FFMAX3(a,b,c) FFMAX(FFMAX(a,b),c)
++#define FFMIN(a,b) ((a) > (b) ? (b) : (a))
++#define FFMIN3(a,b,c) FFMIN(FFMIN(a,b),c)
++
++#define AAC_CUTOFF_FROM_BITRATE(bit_rate,channels,sample_rate) (bit_rate ? FFMIN3(FFMIN3( \
++    FFMAX(bit_rate/channels/5, bit_rate/channels*15/32 - 5500), \
++    3000 + bit_rate/channels/4, \
++    12000 + bit_rate/channels/16), \
++    22000, \
++    sample_rate / 2): (sample_rate / 2))
+ 
+-int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
 +int aacplusEncSetConfigurationLC(aacplusEncHandle hEncoder,
 +        aacplusEncConfiguration *cfg) {
 +    AACPContext *aacp = (AACPContext *) hEncoder;
- 
--int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
++
 +    assert(cfg);
 +    //if (&aacp->aacEnc.sbr_ram) free(&aacp->aacEnc.sbr_ram);
 +               
@@ -369,7 +381,12 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 +    if(aacp->config.bandWidth > aacp->config.sampleRate/2)
 +    	return 0;
 +
-+    if (!aacp->config.bandWidth) aacp->config.bandWidth = aacp->config.sampleRate/2;
++    if (aacp->config.bandWidth == -1) {
++        aacp->config.bandWidth = (aacp->config.sampleRate/2);
++    } else if (aacp->config.bandWidth == 0) {
++        aacp->config.bandWidth = FFMAX(3000, FFMIN(AAC_CUTOFF_FROM_BITRATE((aacp->config.bitRate / aacp->config.nChannelsIn)*1.15f, 1, aacp->config.sampleRate), aacp->config.sampleRate / 2));
++        //fprintf(stderr, "AAC Auto Bandwidth: %d\n", aacp->config.bandWidth);
++    }
 +
 +    aacp->config.inputSamples = aacp->config.nSamplesPerFrame * aacp->config.nChannelsIn;     
 +
@@ -398,7 +415,7 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
          aacplusEncConfiguration *cfg) {
      AACPContext *aacp = (AACPContext *) hEncoder;
  
-@@ -119,19 +187,19 @@
+@@ -119,19 +204,19 @@
      /* set input samples for not only 1024 framesize */
      aacp->config.inputSamples = aacp->config.nSamplesPerFrame * 2 * aacp->config.nChannelsIn;
  
@@ -422,18 +439,13 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
          aacp->writeOffset += aacp->IIR21_reSampler[0].delay*MAX_CHANNELS;
      }
  
-@@ -259,107 +327,252 @@
+@@ -259,107 +344,252 @@
      extradata[0] = AACPLUS_AOT_AAC_LC << 3 | srate_idx >> 1;
      extradata[1] = srate_idx << 7 | ch_idx << 3 | window_size << 2;
  
 -    srate_idx = FindSRIndex(aacp->config.sampleRate * 2);
 +    if (aacp->is_aacplus) {
 +        srate_idx = FindSRIndex(aacp->config.sampleRate * 2);
-+
-+        extradata[2] = loas_sync >> 3; //sync extension
-+        extradata[3] = (loas_sync << 5) & 0xe0 | AACPLUS_AOT_SBR; //sync extension + sbr hdr
-+        extradata[4] = 1 << 7 | srate_idx << 3 | ps_extension >> 8;
-+    }
  
 -    extradata[2] = loas_sync >> 3; //sync extension
 -    extradata[3] = (loas_sync << 5) & 0xe0 | AACPLUS_AOT_SBR; //sync extension + sbr hdr
@@ -442,6 +454,11 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 -        extradata[5] = ps_extension & 0xff;
 -		extradata[6] = 1 << 7;
 -		*pSizeOfDecoderSpecificInfo = 7;
++        extradata[2] = loas_sync >> 3; //sync extension
++        extradata[3] = (loas_sync << 5) & 0xe0 | AACPLUS_AOT_SBR; //sync extension + sbr hdr
++        extradata[4] = 1 << 7 | srate_idx << 3 | ps_extension >> 8;
++    }
++
 +    if (aacp->is_aacplus) {
 +        if(ps_extension) {
 +            extradata[5] = ps_extension & 0xff;
@@ -548,7 +565,12 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 +            }
 +            aacp->blank_samples_needed--;
 +            samplesInput = aacp->config.inputSamples;
-+        }
+         }
+-        case AACPLUS_INPUT_FLOAT: {
+-            float *inbuff = (float *) inputBuffer;
+-            for (i=0; i<samplesInput; i++)
+-                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = inbuff[i] * SHRT_MAX;
+-            break;
 +
 +
 +        /* Simple stereo to mono conversion: L = (L+R)/2 */
@@ -558,11 +580,7 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 +                aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples]
 +                    + aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples+1])*0.5f;
          }
--        case AACPLUS_INPUT_FLOAT: {
--            float *inbuff = (float *) inputBuffer;
--            for (i=0; i<samplesInput; i++)
--                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = inbuff[i] * SHRT_MAX;
--            break;
+-	default:
 +
 +        aacp->writtenSamples+=samplesInput;
 +
@@ -577,8 +595,7 @@ diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/aacplusenc.c ../../p-m-progs/lib
 +            } else {
 +                return 0; // need more data
 +            }
-         }
--	default:
++        }
 +
 +        if(aacp->adts) adts_offset=ADTS_HEADER_SIZE;
 +        if (bufferSize < (6144/8)*MAX_CHANNELS+adts_offset)
@@ -1340,9 +1357,9 @@ Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: cfftn.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: cfftn.o
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: channel_map.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: channel_map.o
-diff -ru libaacplus/libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c ../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c
---- libaacplus/libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c	2022-11-24 23:32:28.004870000 +0700
-+++ ../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c	2022-12-13 21:11:32.866592769 +0700
+diff -ru libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c ../../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c
+--- libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c	2022-11-24 23:32:28.004870000 +0700
++++ ../../p-m-progs/libaacplus-2.0.2-aac/src/code_env.c	2022-12-13 21:11:32.866592769 +0700
 @@ -364,10 +364,14 @@
  
           
@@ -1388,7 +1405,7 @@ diff -ru libaacplus/libaacplus-2.0.2e/libaacplus-2.0.2/src/code_env.c ../p-m-pro
      }
  
       
-Only in ../p-m-progs/libaacplus-2.0.2-aac/src: code_env.lo
+Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: code_env.lo
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: code_env.o
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: .deps
 Only in ../../p-m-progs/libaacplus-2.0.2-aac/src: dyn_bits.lo
