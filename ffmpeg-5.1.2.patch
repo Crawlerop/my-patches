@@ -237,6 +237,17 @@ Only in ffmpeg-5.1.2/libavcodec: aac_ac3_parser.d
 Only in ffmpeg-5.1.2/libavcodec: aac_ac3_parser.o
 Only in ffmpeg-5.1.2/libavcodec: aac_adtstoasc_bsf.d
 Only in ffmpeg-5.1.2/libavcodec: aac_adtstoasc_bsf.o
+diff -ru original/ffmpeg-5.1.2/libavcodec/aaccoder.c ffmpeg-5.1.2/libavcodec/aaccoder.c
+--- original/ffmpeg-5.1.2/libavcodec/aaccoder.c	2022-07-23 00:58:38.000000000 +0700
++++ ffmpeg-5.1.2/libavcodec/aaccoder.c	2022-12-21 13:42:00.733289171 +0700
+@@ -572,6 +572,7 @@
+         bandwidth = avctx->cutoff;
+     } else {
+         bandwidth = FFMAX(3000, AAC_CUTOFF_FROM_BITRATE(frame_bit_rate, 1, avctx->sample_rate));
++        av_log(s, AV_LOG_TRACE, "AAC Auto Cutoff: %d\n", bandwidth);
+     }
+ 
+     cutoff = bandwidth * 2 * wlen / avctx->sample_rate;
 Only in ffmpeg-5.1.2/libavcodec: aaccoder.d
 Only in ffmpeg-5.1.2/libavcodec: aaccoder.o
 Only in ffmpeg-5.1.2/libavcodec: aacdec.d
