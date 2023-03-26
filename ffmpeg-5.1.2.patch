@@ -1853,6 +1853,7 @@ Only in ffmpeg-5.1.2/libavcodec: srtdec.d
 Only in ffmpeg-5.1.2/libavcodec: srtdec.o
 Only in ffmpeg-5.1.2/libavcodec: srtenc.d
 Only in ffmpeg-5.1.2/libavcodec: srtenc.o
+Only in ffmpeg-5.1.2/libavcodec: st1X4Cr1
 Only in ffmpeg-5.1.2/libavcodec: startcode.d
 Only in ffmpeg-5.1.2/libavcodec: startcode.o
 Only in ffmpeg-5.1.2/libavcodec: stqpCJdl
@@ -1984,6 +1985,21 @@ Only in ffmpeg-5.1.2/libavcodec: v4l2_m2m_enc.o
 Only in ffmpeg-5.1.2/libavcodec: v4l2_m2m.o
 Only in ffmpeg-5.1.2/libavcodec: vaapi_av1.d
 Only in ffmpeg-5.1.2/libavcodec: vaapi_av1.o
+diff -ru original/ffmpeg-5.1.2/libavcodec/vaapi_decode.c ffmpeg-5.1.2/libavcodec/vaapi_decode.c
+--- original/ffmpeg-5.1.2/libavcodec/vaapi_decode.c	2022-07-23 00:58:39.000000000 +0700
++++ ffmpeg-5.1.2/libavcodec/vaapi_decode.c	2023-03-26 12:52:32.445118915 +0700
+@@ -381,8 +381,10 @@
+     MAP(MPEG4,       MPEG4_ADVANCED_SIMPLE,
+                                MPEG4AdvancedSimple),
+     MAP(MPEG4,       MPEG4_MAIN,      MPEG4Main   ),
+-    MAP(H264,        H264_CONSTRAINED_BASELINE,
++    MAP(H264,        H264_BASELINE,
+                            H264ConstrainedBaseline),
++    MAP(H264,        H264_CONSTRAINED_BASELINE,
++                           H264ConstrainedBaseline),                       
+     MAP(H264,        H264_MAIN,       H264Main    ),
+     MAP(H264,        H264_HIGH,       H264High    ),
+ #if VA_CHECK_VERSION(0, 37, 0)
 Only in ffmpeg-5.1.2/libavcodec: vaapi_decode.d
 Only in ffmpeg-5.1.2/libavcodec: vaapi_decode.o
 Only in ffmpeg-5.1.2/libavcodec: vaapi_encode.d
