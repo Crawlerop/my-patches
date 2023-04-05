@@ -4242,8 +4242,8 @@ Only in ffmpeg-5.1.2/libavformat: hevc.o
 Only in ffmpeg-5.1.2/libavformat: hls.d
 diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hlsenc.c
 --- original/ffmpeg-5.1.2/libavformat/hlsenc.c	2022-07-23 00:58:39.000000000 +0700
-+++ ffmpeg-5.1.2/libavformat/hlsenc.c	2023-03-29 12:05:16.851284928 +0700
-@@ -252,9 +252,12 @@
++++ ffmpeg-5.1.2/libavformat/hlsenc.c	2023-04-05 22:42:21.666809125 +0700
+@@ -252,9 +252,13 @@
      AVIOContext *sub_m3u8_out;
      int64_t timeout;
      int ignore_io_errors;
@@ -4253,10 +4253,11 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
      int has_video_m3u8; /* has video stream m3u8 list */
 +
 +    int segment_null_duration_count;
++    int target_duration_null;
  } HLSContext;
  
  static int strftime_expand(const char *fmt, char **dest)
-@@ -942,6 +945,8 @@
+@@ -942,6 +946,8 @@
          snprintf(period, sizeof(period), "%d", (INT_MAX / 2) - 1);
          av_dict_set(&options, "sdt_period", period, AV_DICT_DONT_OVERWRITE);
          av_dict_set(&options, "pat_period", period, AV_DICT_DONT_OVERWRITE);
@@ -4265,7 +4266,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
      }
      ret = avformat_init_output(oc, &options);
      remaining_options = av_dict_count(options);
-@@ -1555,6 +1560,9 @@
+@@ -1555,6 +1561,9 @@
          hls->version = 3;
      }
  
@@ -4275,7 +4276,25 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
      if (byterange_mode) {
          hls->version = 4;
          sequence = 0;
-@@ -1608,6 +1616,8 @@
+@@ -1588,6 +1597,17 @@
+             target_duration = lrint(en->duration);
+     }
+ 
++    if (target_duration <= 0) {
++        av_log(s, AV_LOG_ERROR, "Target duration is zero, playlist may not work properly. Playlists with bad target duration: %d\n", ++hls->target_duration_null);
++        if (hls->target_duration_null >= 25000) {
++            av_log(s, AV_LOG_ERROR, "Halting to prevent further errors for the client.\n");
++            ret = AVERROR_INVALIDDATA;
++            goto fail;
++        }
++    } else {
++        hls->target_duration_null = 0;
++    }
++
+     vs->discontinuity_set = 0;
+     ff_hls_write_playlist_header(byterange_mode ? hls->m3u8_out : vs->out, hls->version, hls->allowcache,
+                                  target_duration, sequence, hls->pl_type, hls->flags & HLS_I_FRAMES_ONLY);
+@@ -1608,6 +1628,8 @@
              avio_printf(byterange_mode ? hls->m3u8_out : vs->out, "\n");
              key_uri = en->key_uri;
              iv_string = en->iv_string;
@@ -4284,7 +4303,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
          }
  
          if ((hls->segment_type == SEGMENT_TYPE_FMP4) && (en == vs->segments)) {
-@@ -1620,7 +1630,8 @@
+@@ -1620,7 +1642,8 @@
                                        en->size, en->pos, hls->baseurl,
                                        en->filename,
                                        en->discont_program_date_time ? &en->discont_program_date_time : prog_date_time_p,
@@ -4294,7 +4313,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
          if (en->discont_program_date_time)
              en->discont_program_date_time -= en->duration;
          if (ret < 0) {
-@@ -1643,7 +1654,7 @@
+@@ -1643,7 +1666,7 @@
          for (en = vs->segments; en; en = en->next) {
              ret = ff_hls_write_file_entry(hls->sub_m3u8_out, 0, byterange_mode,
                                            en->duration, 0, en->size, en->pos,
@@ -4303,7 +4322,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
              if (ret < 0) {
                  av_log(s, AV_LOG_WARNING, "ff_hls_write_file_entry get error\n");
              }
-@@ -1802,7 +1813,8 @@
+@@ -1802,7 +1825,8 @@
      }
      if (c->segment_type != SEGMENT_TYPE_FMP4) {
          if (oc->oformat->priv_class && oc->priv_data) {
@@ -4313,17 +4332,28 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
          }
          if (c->flags & HLS_SINGLE_FILE) {
              if (c->key_info_file || c->encrypt) {
-@@ -2483,9 +2495,20 @@
+@@ -2475,17 +2499,34 @@
+         if (vs->end_pts == AV_NOPTS_VALUE)
+             vs->end_pts = pkt->pts;
+         if (vs->new_start) {
++            hls->segment_null_duration_count = 0;
+             vs->new_start = 0;
+             vs->duration = (double)(pkt->pts - vs->end_pts)
+                                        * st->time_base.num / st->time_base.den;
+             vs->dpp = (double)(pkt->duration) * st->time_base.num / st->time_base.den;
+         } else {
              if (pkt->duration) {
++                hls->segment_null_duration_count = 0;
                  vs->duration += (double)(pkt->duration) * st->time_base.num / st->time_base.den;
              } else {
 -                av_log(s, AV_LOG_WARNING, "Stream %d packet with pts %" PRId64 " has duration 0. The segment duration may not be precise.\n",
 +                if (hls->segment_null_duration_count++ >= 25000) {
-+                    av_log(s, AV_LOG_ERROR, "Stream %d packet with pts %" PRId64 " has duration 0. Aborting due to issues during playback.\n",
++                    av_log(s, AV_LOG_ERROR, "Stream %d packet with pts %" PRId64 " has duration 0. Halting to prevent further errors for the client.\n",
                         pkt->stream_index, pkt->pts);
 -                vs->duration = (double)(pkt->pts - vs->end_pts) * st->time_base.num / st->time_base.den;
 +                    return AVERROR_INVALIDDATA;
 +                } else {
++                    /*
 +                    if ((hls->segment_null_duration_count % 1000) == 0) {
 +                        av_log(s, AV_LOG_ERROR, "Stream %d packet with pts %" PRId64 " has duration 0. %d packets with broken durations.\n",
 +                            pkt->stream_index, pkt->pts, hls->segment_null_duration_count);
@@ -4331,12 +4361,15 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
 +                        av_log(s, AV_LOG_WARNING, "Stream %d packet with pts %" PRId64 " has duration 0. The segment duration may not be precise.\n",
 +                            pkt->stream_index, pkt->pts);
 +                    }
++                    */
++                    av_log(s, AV_LOG_ERROR, "Stream %d packet with pts %" PRId64 " has duration 0. %d packets with broken durations.\n",
++                            pkt->stream_index, pkt->pts, hls->segment_null_duration_count);
 +                    vs->duration = (double)(pkt->pts - vs->end_pts) * st->time_base.num / st->time_base.den;
 +                }                
              }
          }
      }
-@@ -2556,7 +2579,8 @@
+@@ -2556,7 +2597,8 @@
  
                  // look to rename the asset name
                  if (use_temp_file)
@@ -4346,7 +4379,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
  
                  set_http_options(s, &options, hls);
  
-@@ -2636,7 +2660,8 @@
+@@ -2636,7 +2678,8 @@
              if (hls->key_info_file || hls->encrypt)
                  ret = hls_start(s, vs);
              if (hls->segment_type == SEGMENT_TYPE_MPEGTS && oc->oformat->priv_class && oc->priv_data) {
@@ -4356,7 +4389,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
              }
          } else if (hls->max_seg_size > 0) {
              if (vs->size + vs->start_pos >= hls->max_seg_size) {
-@@ -2867,11 +2892,12 @@
+@@ -2867,11 +2910,12 @@
      if (hls->use_localtime) {
          pattern = get_default_pattern_localtime_fmt(s);
      } else {
@@ -4370,7 +4403,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
      hls->has_default_key = 0;
      hls->has_video_m3u8 = 0;
      ret = update_variant_stream_info(s);
-@@ -3165,6 +3191,7 @@
+@@ -3165,6 +3209,7 @@
      {"timeout", "set timeout for socket I/O operations", OFFSET(timeout), AV_OPT_TYPE_DURATION, { .i64 = -1 }, -1, INT_MAX, .flags = E },
      {"ignore_io_errors", "Ignore IO errors for stable long-duration runs with network output", OFFSET(ignore_io_errors), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, E },
      {"headers", "set custom HTTP headers, can override built in default headers", OFFSET(headers), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
