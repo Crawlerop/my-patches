@@ -4282,7 +4282,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
  
 +    if (target_duration <= 0) {
 +        av_log(s, AV_LOG_ERROR, "Target duration is zero, playlist may not work properly. Playlists with bad target duration: %d\n", ++hls->target_duration_null);
-+        if (hls->target_duration_null >= 25000) {
++        if (hls->target_duration_null >= 5000) {
 +            av_log(s, AV_LOG_ERROR, "Halting to prevent further errors for the client.\n");
 +            ret = AVERROR_INVALIDDATA;
 +            goto fail;
@@ -4347,7 +4347,7 @@ diff -ru original/ffmpeg-5.1.2/libavformat/hlsenc.c ffmpeg-5.1.2/libavformat/hls
                  vs->duration += (double)(pkt->duration) * st->time_base.num / st->time_base.den;
              } else {
 -                av_log(s, AV_LOG_WARNING, "Stream %d packet with pts %" PRId64 " has duration 0. The segment duration may not be precise.\n",
-+                if (hls->segment_null_duration_count++ >= 25000) {
++                if (hls->segment_null_duration_count++ >= 10000) {
 +                    av_log(s, AV_LOG_ERROR, "Stream %d packet with pts %" PRId64 " has duration 0. Halting to prevent further errors for the client.\n",
                         pkt->stream_index, pkt->pts);
 -                vs->duration = (double)(pkt->pts - vs->end_pts) * st->time_base.num / st->time_base.den;
